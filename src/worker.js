@@ -4,11 +4,12 @@ import { Client } from '@neondatabase/serverless';
 export default {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
+		const REDIRECT_URL = 'https://www.marketintelgpt.com';
 
 		const matcher = /^\/(api|_next\/static|_next\/image|favicon\.ico).*/;
 		if (matcher.test(url.pathname)) {
 			// We can handle assets and API routes here
-			return fetch(`https://www.marketintelgpt.com/${url.pathname}`);
+			return fetch(`${REDIRECT_URL}/${url.pathname}`);
 		}
 
 		// Retreive user info from cookie
@@ -24,17 +25,12 @@ export default {
 		const user = rows[0];
 		console.log('User:', user);
 
-		const response = await fetch(`https://www.marketintelgpt.com/${url.pathname}`);
-		let html = await response.text();
-
+		let response = await fetch(`${REDIRECT_URL}/${url.pathname}`);
+		response = new Response(response.body, response);
+		// Set cookie to enable persistent A/B sessions.
 		if (user.feature_flag) {
-			html = html.replace('This is a headline', 'This is a headline from Cloudflare Worker');
+			response.headers.append('Set-Cookie', `ae=1`);
 		}
-
-		return new Response(html, {
-			headers: {
-				'content-type': 'text/html;charset=UTF-8',
-			},
-		});
+		return response;
 	},
 };
