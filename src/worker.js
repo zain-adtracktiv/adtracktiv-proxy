@@ -27,18 +27,18 @@ export default {
 			user.feature_flag ? 1 : 0
 		}; HttpOnly; Secure; SameSite=None; Path=/; Domain=.marketintelgpt.com; Max-Age=31536000;`;
 
+		const headers = {
+			'Content-Type': 'application/javascript',
+			'Cache-Control': 'max-age=3600',
+			'Access-Control-Allow-Origin': '*',
+			Cookie: cookie,
+		};
+
 		if (url.pathname.startsWith('/r/')) {
 			const rotatorName = url.pathname.split('/')[2];
 			const {
 				rows: [rotator],
 			} = await client.query('SELECT * FROM rotator WHERE name = $1', [rotatorName]);
-
-			const headers = {
-				'Content-Type': 'application/javascript',
-				'Cache-Control': 'max-age=3600',
-				'Access-Control-Allow-Origin': '*',
-				Cookie: cookie,
-			};
 
 			let response = await fetch(`${REDIRECT_URL}/${rotator.url}${params ? `?${params}` : ''}`, {
 				headers,
@@ -53,7 +53,9 @@ export default {
 
 		// Retreive user info from cookie
 
-		let response = await fetch(`${REDIRECT_URL}/${url.pathname}`);
+		let response = await fetch(`${REDIRECT_URL}/${url.pathname}`, {
+			headers,
+		});
 		response = new Response(response.body, response);
 		// Set cookie to enable persistent A/B sessions.
 		response.headers.append('Set-Cookie', cookie);
