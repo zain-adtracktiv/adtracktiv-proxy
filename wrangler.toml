@@ -4,4 +4,4 @@ compatibility_date = "2024-04-09"
 workers_dev = true
 
 [vars]
-DATABASE_URL = "postgresql://test-db_owner:RuJjb6cYPZ5p@ep-divine-bird-a14u7eh7-pooler.ap-southeast-1.aws.neon.tech/test-db?sslmode=require"
+DATABASE_URL = "postgres://default:h2TAWdYM6pPF@ep-noisy-breeze-a28dyyif-pooler.eu-central-1.aws.neon.tech:5432/verceldb?sslmode=require"
