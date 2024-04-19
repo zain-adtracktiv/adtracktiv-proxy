@@ -1,66 +1,69 @@
-import { parse } from 'cookie';
 import { Client } from '@neondatabase/serverless';
+import { Router } from 'itty-router';
 
-export default {
-	async fetch(request, env, ctx) {
-		const url = new URL(request.url);
-		const params = url.searchParams.toString();
+// Create a new router
+const router = Router();
 
-		const REDIRECT_URL = 'https://www.marketintelgpt.com';
+const REDIRECT_URL = 'https://www.marketintelgpt.com';
 
-		const matcher = /^\/(api|_next\/static|_next\/image|favicon\.ico).*/;
-		if (matcher.test(url.pathname)) {
-			// We can handle assets and API routes here
-			return fetch(`${REDIRECT_URL}/${url.pathname}${params ? `?${params}` : ''}`);
-		}
+router.get('/r/*', async (request, env, ctx) => {
+	const userId = 1;
 
-		const client = new Client(env.DATABASE_URL);
-		await client.connect();
+	const url = new URL(request.url);
+	const params = url.searchParams.toString();
 
-		const userId = 1;
+	const client = new Client(env.DATABASE_URL);
+	await client.connect();
 
-		const {
-			rows: [user],
-		} = await client.query('SELECT * FROM test_user WHERE id = $1', [userId]);
+	const {
+		rows: [user],
+	} = await client.query('SELECT * FROM test_user WHERE id = $1', [userId]);
 
-		const cookie = `ae=${
-			user.feature_flag ? 1 : 0
-		}; HttpOnly; Secure; SameSite=None; Path=/; Domain=.marketintelgpt.com; Max-Age=31536000;`;
+	const cookie = `ae=${user.feature_flag ? 1 : 0}; HttpOnly; Secure; SameSite=None; Path=/; Domain=.marketintelgpt.com; Max-Age=31536000;`;
 
-		const headers = {
-			'Content-Type': 'application/javascript',
-			'Cache-Control': 'max-age=3600',
-			'Access-Control-Allow-Origin': '*',
-			Cookie: cookie,
-		};
+	const headers = {
+		'Content-Type': 'application/javascript',
+		'Cache-Control': 'max-age=3600',
+		'Access-Control-Allow-Origin': '*',
+		Cookie: cookie,
+	};
 
-		if (url.pathname.startsWith('/r/')) {
-			const rotatorName = url.pathname.split('/')[2];
-			const {
-				rows: [rotator],
-			} = await client.query('SELECT * FROM rotator WHERE name = $1', [rotatorName]);
+	const rotatorName = url.pathname.split('/')[2];
+	const {
+		rows: [rotator],
+	} = await client.query('SELECT * FROM rotator WHERE name = $1', [rotatorName]);
 
-			let response = await fetch(`${REDIRECT_URL}/${rotator.url}${params ? `?${params}` : ''}`, {
-				headers,
-			});
+	let response = await fetch(`${REDIRECT_URL}/${rotator.url}${params ? `?${params}` : ''}`, {
+		headers,
+	});
 
-			response = new Response(response.body, response);
-			response.headers.append('Set-Cookie', cookie);
+	response = new Response(response.body, response);
+	response.headers.append('Set-Cookie', cookie);
 
-			ctx.waitUntil(client.end());
-			return response;
-		}
+	ctx.waitUntil(client.end());
+	return response;
+});
 
-		// Retreive user info from cookie
+router.post('/e', async (request, env, ctx) => {
+	const body = await request.json();
 
-		let response = await fetch(`${REDIRECT_URL}/${url.pathname}`, {
-			headers,
-		});
-		response = new Response(response.body, response);
-		// Set cookie to enable persistent A/B sessions.
-		response.headers.append('Set-Cookie', cookie);
+	const client = new Client(env.DATABASE_URL);
+	await client.connect();
 
-		ctx.waitUntil(client.end());
-		return response;
-	},
-};
+	await client.query(`INSERT INTO event (name, location) VALUES ($1, $2)`, [body.name, body.location]);
+
+	ctx.waitUntil(client.end());
+
+	return Response.json({
+		success: true,
+	});
+});
+
+router.all('*', (request) => {
+	const url = new URL(request.url);
+	const params = url.searchParams.toString();
+
+	return fetch(`${REDIRECT_URL}/${url.pathname}${params ? `?${params}` : ''}`);
+});
+
+export default { ...router }; // this looks pointless, but trust us
