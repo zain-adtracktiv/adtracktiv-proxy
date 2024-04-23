@@ -1,9 +1,11 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
+import { parse } from 'cookie';
 
 // Create a new router
 const router = Router();
 
+// This will be replaced with the subdomain where the pages are hosted (e.g ain)
 const REDIRECT_URL = 'https://www.marketintelgpt.com';
 
 router.get('/r/*', async (request, env, ctx) => {
@@ -47,10 +49,28 @@ router.get('/r/*', async (request, env, ctx) => {
 router.post('/e', async (request, env, ctx) => {
 	const body = await request.json();
 
+	const url = new URL(body.location);
+	const isRotatorUrl = url.pathname.startsWith('/r/');
+
+	const cookie = parse(request.headers.get('Cookie') || '');
+
+	let redirectUrl;
+	if (isRotatorUrl) {
+		redirectUrl = cookie['redirectUrl'];
+	}
+
+	const variations = JSON.parse(cookie['variations']);
+	const variation = variations ? variations.find((v) => v.url === (redirectUrl || body.location)) : null;
+
 	const client = new Client(env.DATABASE_URL);
 	await client.connect();
 
-	await client.query(`INSERT INTO event (name, location) VALUES ($1, $2)`, [body.name, body.location]);
+	await client.query(`INSERT INTO event (name, location, rotator_url, page_variation_name) VALUES ($1, $2, $3, $4)`, [
+		body.eventName,
+		redirectUrl || body.location,
+		redirectUrl && body.location,
+		variation?.name,
+	]);
 
 	ctx.waitUntil(client.end());
 
@@ -66,4 +86,4 @@ router.all('*', (request) => {
 	return fetch(`${REDIRECT_URL}/${url.pathname}${params ? `?${params}` : ''}`);
 });
 
-export default { ...router }; // this looks pointless, but trust us
+export default { ...router };
