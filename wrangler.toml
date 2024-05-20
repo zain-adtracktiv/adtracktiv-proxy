@@ -3,5 +3,10 @@ main = "src/worker.js"
 compatibility_date = "2024-04-09"
 workers_dev = true
 
+kv_namespaces = [
+    { binding = "ADTRACKTIV", id = "362be46f94ff4be2899c917e696ae8ed" }
+]
+
 [vars]
 DATABASE_URL = "postgres://default:h2TAWdYM6pPF@ep-noisy-breeze-a28dyyif-pooler.eu-central-1.aws.neon.tech:5432/verceldb?sslmode=require"
+
