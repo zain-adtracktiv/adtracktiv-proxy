@@ -1,50 +1,13 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
 import { parse, serialize } from 'cookie';
+import { deepMerge, extractRootDomain } from './utils';
 
 // Create a new router
 const router = Router();
 
 // This will be replaced with the subdomain where the pages are hosted (e.g ain)
 const REDIRECT_URL = 'https://www.marketintelgpt.com';
-
-router.get('/r/*', async (request, env, ctx) => {
-	const userId = 1;
-
-	const url = new URL(request.url);
-	const params = url.searchParams.toString();
-
-	const client = new Client(env.DATABASE_URL);
-	await client.connect();
-
-	const {
-		rows: [user],
-	} = await client.query('SELECT * FROM test_user WHERE id = $1', [userId]);
-
-	const cookie = `ae=${user.feature_flag ? 1 : 0}; HttpOnly; Secure; SameSite=None; Path=/; Domain=.marketintelgpt.com; Max-Age=31536000;`;
-
-	const headers = {
-		'Content-Type': 'application/javascript',
-		'Cache-Control': 'max-age=3600',
-		'Access-Control-Allow-Origin': '*',
-		Cookie: cookie,
-	};
-
-	const rotatorName = url.pathname.split('/')[2];
-	const {
-		rows: [rotator],
-	} = await client.query('SELECT * FROM rotator WHERE name = $1', [rotatorName]);
-
-	let response = await fetch(`${REDIRECT_URL}/${rotator.url}${params ? `?${params}` : ''}`, {
-		headers,
-	});
-
-	response = new Response(response.body, response);
-	response.headers.append('Set-Cookie', cookie);
-
-	ctx.waitUntil(client.end());
-	return response;
-});
 
 router.post('/e', async (request, env, ctx) => {
 	const body = await request.json();
@@ -58,8 +21,8 @@ router.post('/e', async (request, env, ctx) => {
 	const userId = al?.userId;
 
 	for (const event of body) {
-		const url = new URL(event.location);
-		const isRotatorUrl = url.pathname.startsWith('/r/');
+		const url = event?.location ? new URL(event.location) : '';
+		const isRotatorUrl = url?.pathname?.startsWith('/r/');
 
 		// redirectUrl is the url to which the rotator redirects the user to
 		let redirectUrl;
@@ -67,14 +30,13 @@ router.post('/e', async (request, env, ctx) => {
 			redirectUrl = cookie['redirectUrl'];
 		}
 
-		const variations = JSON.parse(cookie['variations'] || '[]');
-		const variation = variations ? variations.find((v) => v.url === (redirectUrl || event.location)) : null;
+		const variations = JSON.parse(cookie['variations'] || null);
 
 		await client.query(`INSERT INTO event (name, location, rotator_url, page_variation_name, user_id) VALUES ($1, $2, $3, $4, $5)`, [
 			event.eventName,
 			redirectUrl || event.location,
 			redirectUrl && event.location,
-			variation?.name,
+			variations,
 			userId,
 		]);
 	}
@@ -87,22 +49,30 @@ router.post('/e', async (request, env, ctx) => {
 });
 
 router.post('/i', async (request, env, ctx) => {
-	const origin = request.headers.get('origin');
-	const eventsConfig = await env.ADTRACKTIV.get('www.marketintelgpt.com'); // replace url with origin
-
 	const cookie = parse(request.headers.get('Cookie') || '');
-	const oldAl = JSON.parse(cookie?.['al'] || '{}');
+	const oldAlValue = JSON.parse(cookie?.['al'] || '{}');
 
-	let userId = oldAl?.userId;
+	let userId = oldAlValue?.userId;
 	if (!userId) {
 		// also create user in database with this id
-		// userId = crypto.randomUUID();
-		userId = '3a26df84-cf3a-42d0-89fe-0a9619b65ba1';
+		userId = crypto.randomUUID();
 	}
 
+	let sessionId = oldAlValue?.sessionId;
+	if (!sessionId) {
+		sessionId = crypto.randomUUID();
+	}
+
+	const timestamp = new Date().toISOString();
+
+	const queryParams = JSON.stringify(request.query);
+
 	const al = {
+		...oldAlValue,
 		userId,
-		...oldAl,
+		sessionId,
+		timestamp,
+		queryParams,
 	};
 
 	const newCookie = serialize('al', JSON.stringify(al), {
@@ -113,8 +83,105 @@ router.post('/i', async (request, env, ctx) => {
 		success: true,
 	});
 	response.headers.append('Set-Cookie', newCookie);
+	response.headers.append('al', JSON.stringify(al));
 
 	return response;
+});
+
+router.get('/i', async (request, env, ctx) => {
+	return new Response.json({
+		success: true,
+	});
+});
+
+router.patch('/i', async (request, env, ctx) => {
+	const body = await request.json();
+
+	const url = new URL(request.url);
+	const urlParams = url.searchParams;
+
+	const location = body.location;
+
+	if (!location || !isValidUrl(location)) {
+		console.log(`[${correlationId}] Bad Request: malformed h parameter in ${request.url}`);
+
+		return new Response('Bad Request', {
+			status: 400,
+		});
+	}
+
+	const clientLocation = new URL(location);
+	const hostname = request.headers.get('host');
+
+	const rootHost = extractRootDomain(hostname);
+	const clientRootHost = extractRootDomain(clientLocation.hostname);
+
+	if (rootHost !== clientRootHost) {
+		console.log(`[${correlationId}] Bad Request: not first party ${rootHost} !== ${clientRootHost}`);
+
+		return new Response('Bad Request', {
+			status: 400,
+		});
+	}
+
+	const cookie = parse(request.headers.get('Cookie') || '');
+	const cookieLinker = JSON.parse(cookie?.['al'] || '{}');
+
+	const { pseudoId, sessionId, userIds } = cookieLinker.split('*');
+
+	const setObject = body.set;
+	const key = setObject.key;
+	const value = setObject.value;
+
+	let newLinker = '';
+
+	if (key === 'urlParams') {
+		let marketingParams = deepMerge(JSON.parse(atob(sessionId.split('.')[2])), value);
+		const newSessionId = sessionId.split('.').slice(0, 2).join('.') + '.' + btoa(JSON.stringify(marketingParams));
+
+		newLinker = pseudoId + '*' + newSessionId + '*' + userIds;
+	} else if (key === 'user') {
+		let userParams = deepMerge(JSON.parse(atob(userIds)), value);
+
+		newLinker = pseudoId + '*' + sessionId + '*' + btoa(JSON.stringify(userParams));
+	} else {
+		console.log(`[${correlationId}] Bad Request: invalid key ${key}`);
+		return new Response('Bad Request', {
+			status: 400,
+		});
+	}
+
+	let headers = {
+		'Content-Type': 'application/javascript',
+		'Cache-Control': 'max-age=3600',
+		'Access-Control-Allow-Origin': clientLocation.origin,
+	};
+
+	if (newLinker) {
+		const cookie = `_al=${newLinker}; HttpOnly; Secure; SameSite=Strict; Path=/; Domain=.${rootHost}; Max-Age=31536000;`;
+		headers['Set-Cookie'] = cookie;
+	}
+
+	// Return the linker in the response body and set the cookie in the header
+	const response = new Response(newLinker, {
+		headers,
+	});
+
+	return response;
+});
+
+router.post('/decide', async (request, env, ctx) => {
+	// TODO: Replace
+	const value = await env.ADTRACKTIV.get('vip.trysnow.com');
+	const experiences = JSON.parse(value);
+
+	// Condition checking here
+	const experience = experiences[0];
+
+	return Response.json({
+		redirectUrl: experience.url,
+		variations: experience.flags,
+	});
 });
 
 router.all('*', (request) => {
