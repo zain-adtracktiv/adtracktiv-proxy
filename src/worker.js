@@ -24,11 +24,6 @@ router.post('/e', async (request, env, ctx) => {
 
 	const marketingParams = JSON.parse(atob(sessionId.split('.')[2]));
 
-	const page = marketingParams.lp;
-	const pageUrl = new URL(page);
-	const hostname = pageUrl.hostname;
-	const pathname = pageUrl.pathname;
-
 	const referrer = request.headers.get('referer');
 	const referrerUrl = referrer ? new URL(referrer) : null;
 	const referrerHostname = referrerUrl?.hostname;
@@ -40,6 +35,11 @@ router.post('/e', async (request, env, ctx) => {
 		const isRotatorUrl = url?.pathname?.startsWith('/r/');
 		// redirectUrl is the url to which the rotator redirects the user to
 		let redirectUrl;
+
+		const page = event.location || marketingParams.lp;
+		const pageUrl = new URL(page);
+		const hostname = pageUrl.hostname;
+		const pathname = pageUrl.pathname;
 
 		await client.query(
 			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
