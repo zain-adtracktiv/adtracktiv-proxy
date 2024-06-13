@@ -4,15 +4,20 @@ import { parse, serialize } from 'cookie';
 import { deepMerge, extractRootDomain } from './utils';
 import _ from 'lodash';
 
-// Create a new router
 const router = Router();
 
 router.post('/e', async (request, env, ctx) => {
+	//TODO authenticate request
+
+	const requestClone = request.clone();
 	const body = await request.json();
 
-	// TODO: Fill in user agent and geo fields
-	// console.log(request.headers.get('user-agent'));
-	// console.log(request.headers.get('X-Forwarded-For'));
+	if (!body.fromSdk) {
+		// TODO next step include lifeforce webhooks, then also main site js
+		return await env.ROUTER.fetch(requestClone);
+	}
+
+	console.log('From SDK');
 
 	const client = new Client(env.DATABASE_URL);
 	await client.connect();
@@ -22,21 +27,23 @@ router.post('/e', async (request, env, ctx) => {
 	const linker = cookie['_al'] || '';
 	const [pseudoId, sessionId] = linker.split('*');
 
-	const marketingParams = JSON.parse(atob(sessionId.split('.')[2]));
+	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
 
 	const referrer = request.headers.get('referer');
 	const referrerUrl = referrer ? new URL(referrer) : null;
 	const referrerHostname = referrerUrl?.hostname;
 	const referrerPathname = referrerUrl?.pathname;
 
-	for (const event of body) {
-		const url = event?.location ? new URL(event.location) : '';
+	for (const event of body.events) {
+		console.log('location', event?.location, 'from event', event);
+		const url = event?.location ? new URL('https://' + event.location) : new URL('https://quiz.mylifeforce.com'); // NB hardcoded temporarily
 
 		const isRotatorUrl = url?.pathname?.startsWith('/r/');
 		// redirectUrl is the url to which the rotator redirects the user to
 		let redirectUrl;
 
-		const page = event.location || marketingParams.lp;
+		const page = 'https://' + event.location || marketingParams.lp || 'https://quiz.mylifeforce.com'; // NB hardcoded temporarily
+		console.log('page', page);
 		const pageUrl = new URL(page);
 		const hostname = pageUrl.hostname;
 		const pathname = pageUrl.pathname;
@@ -46,8 +53,8 @@ router.post('/e', async (request, env, ctx) => {
 			[
 				event.eventName,
 				event.companyId,
-				pseudoId,
-				sessionId,
+				null, // should be pseudoId
+				null, // should be sessionId
 				event.parameters,
 				marketingParams.utm_campaign,
 				marketingParams.utm_source,
@@ -62,6 +69,8 @@ router.post('/e', async (request, env, ctx) => {
 				referrerHostname,
 				referrerPathname,
 			]
+
+			// TODO add geo and user properties in event object
 		);
 	}
 
@@ -113,9 +122,9 @@ router.post('/i', async (request, env, ctx) => {
 });
 
 router.get('/i', async (request, env, ctx) => {
-	return new Response.json({
-		success: true,
-	});
+	return await env.ROUTER.fetch(request);
+
+	// return new Response('success');
 });
 
 router.patch('/i', async (request, env, ctx) => {
@@ -196,7 +205,7 @@ router.patch('/i', async (request, env, ctx) => {
 
 router.post('/decide', async (request, env, ctx) => {
 	// TODO: Replace
-	const value = await env.ADTRACKTIV.get('vip.trysnow.com');
+	const value = await env.SDK_CONFIG.get('vip.trysnow.com');
 	const experiences = JSON.parse(value);
 
 	// Condition checking here
@@ -372,6 +381,12 @@ router.post('/reconcile-pseudo', async (request, env, ctx) => {
 	return Response.json({
 		success: true,
 	});
+});
+
+router.all('/test', async (request, env) => {
+	return await env.ROUTER.fetch(request);
+	// return awaitnew Response(result);
+	// new Response('Not Found', { status: 404 })
 });
 
 export default { ...router };

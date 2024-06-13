@@ -1,10 +1,13 @@
 name = "adtracktiv-proxy"
 main = "src/worker.js"
 compatibility_date = "2024-04-09"
-workers_dev = true
+
+services = [
+  { binding = "ROUTER", service = "cloudflare-tracking-router" }
+]
 
 kv_namespaces = [
-    { binding = "ADTRACKTIV", id = "362be46f94ff4be2899c917e696ae8ed" }
+    { binding = "SDK_CONFIG", id = "567f9098e474460695a647ef4e1baae4" }
 ]
 
 [vars]

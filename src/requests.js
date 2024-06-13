@@ -1,6 +1,6 @@
-async function verifyRequest(request) {
-	// const correlationId = request.correlationId;
+import { extractRootDomain } from './utils';
 
+export async function verifyRequest(request) {
 	const body = await request.json();
 
 	const url = new URL(request.url);
@@ -9,10 +9,15 @@ async function verifyRequest(request) {
 	const location = body.location;
 
 	if (!location || !isValidUrl(location)) {
-		console.log(`[${correlationId}] Bad Request: malformed h parameter in ${request.url}`);
+		console.log(`Bad Request: missing location in body from ${request.url}`);
 		return new Response('Bad Request', {
 			status: 400,
 		});
+	}
+
+	const clientH = JSON.parse(urlParams.get('h'));
+	if (clientH) {
+		//service binding to cloudflare-tracking-router
 	}
 
 	const clientLocation = new URL(location);
@@ -22,11 +27,11 @@ async function verifyRequest(request) {
 	const clientRootHost = extractRootDomain(clientLocation.hostname);
 
 	if (rootHost !== clientRootHost) {
-		console.log(`[${correlationId}] Bad Request: not first party ${rootHost} !== ${clientRootHost}`);
+		console.log(`Bad Request: not first party ${rootHost} !== ${clientRootHost}`);
 		return new Response('Bad Request', {
 			status: 400,
 		});
 	}
 
-	return { correlationId, clientH, clientLocation, rootHost, clientDetails, urlParams };
+	return { clientLocation, rootHost, urlParams };
 }
