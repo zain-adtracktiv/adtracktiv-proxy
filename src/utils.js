@@ -15,3 +15,11 @@ export function extractRootDomain(origin) {
 		return noProtocol;
 	}
 }
+
+export function removeNonAlphaChars(str) {
+	return str.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+export function removeNonAlphaAndNonNumericChars(str) {
+	return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
