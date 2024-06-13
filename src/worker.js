@@ -50,7 +50,7 @@ router.post('/e', async (request, env, ctx) => {
 		// redirectUrl is the url to which the rotator redirects the user to
 		let redirectUrl;
 
-		const page = 'https://' + event.location || marketingParams.lp || 'https://quiz.mylifeforce.com'; // NB hardcoded temporarily
+		const page = event.location || marketingParams.lp;
 		console.log('page', page);
 		const pageUrl = new URL(page);
 		const hostname = pageUrl.hostname;
