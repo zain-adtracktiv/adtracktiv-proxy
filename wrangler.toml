@@ -11,5 +11,5 @@ kv_namespaces = [
 ]
 
 [vars]
-DATABASE_URL = "postgres://default:h2TAWdYM6pPF@ep-noisy-breeze-a28dyyif-pooler.eu-central-1.aws.neon.tech:5432/verceldb?sslmode=require"
+DATABASE_URL = "postgres://default:YARjpaN2hKT4@ep-blue-star-a44wwese-pooler.us-east-1.aws.neon.tech:5432/verceldb?sslmode=require"
 
