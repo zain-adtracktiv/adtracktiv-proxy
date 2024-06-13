@@ -1,7 +1,7 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
 import { parse, serialize } from 'cookie';
-import { deepMerge, extractRootDomain, removeNonAlphaAndNonNumericChars, removeNonAlphaChars } from './utils';
+import { deepMerge, extractRootDomain, isValidUrl, removeNonAlphaAndNonNumericChars, removeNonAlphaChars } from './utils';
 import _ from 'lodash';
 import { UAParser } from 'ua-parser-js';
 
@@ -31,7 +31,7 @@ router.post('/e', async (request, env, ctx) => {
 	const cookie = parse(request.headers.get('Cookie') || '');
 
 	const linker = cookie['_al'] || '';
-	const [pseudoId, sessionId] = linker ? linker.split('*') : [null, null];
+	const [pseudoId, sessionId] = linker.split('*');
 
 	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
 
@@ -41,28 +41,32 @@ router.post('/e', async (request, env, ctx) => {
 	const referrerPathname = referrerUrl?.pathname;
 
 	for (const event of body.events) {
-		const url = event?.location ? new URL(event.location) : '';
+		console.log('event', event);
 
 		const deviceWidth = event?.width ? event.width : null;
 		const deviceHeight = event?.height ? event.height : null;
 
-		const isRotatorUrl = url?.pathname?.startsWith('/r/');
-		// redirectUrl is the url to which the rotator redirects the user to
-		let redirectUrl;
+		// TODO: Check for rotator and variation applied
+		// const isRotatorUrl = url?.pathname?.startsWith('/r/');
 
-		const page = event.location || marketingParams.lp;
-		console.log('page', page);
-		const pageUrl = new URL(page);
-		const hostname = pageUrl.hostname;
-		const pathname = pageUrl.pathname;
+		const pageHref = event.location;
+		console.log('page', pageHref);
+		const pageUrl = isValidUrl(pageHref) ? new URL(pageHref) : null;
+		const pageHostname = pageUrl?.hostname;
+		const pagePathname = pageUrl?.pathname;
+
+		const firstPageUrl = isValidUrl(marketingParams.lp) ? new URL(marketingParams.lp) : null;
+		const firstPageHref = firstPageUrl?.href;
+		const firstPageHostname = firstPageUrl?.hostname;
+		const firstPagePathname = firstPageUrl?.pathname;
 
 		await client.query(
-			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
+			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, first_page_href, first_page_hostname, first_page_pathname, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
 			[
 				event.eventName,
 				event.companyId,
-				null, // should be pseudoId
-				null, // should be sessionId
+				pseudoId,
+				sessionId,
 				event.parameters,
 				marketingParams.utm_campaign,
 				marketingParams.utm_source,
@@ -70,9 +74,12 @@ router.post('/e', async (request, env, ctx) => {
 				marketingParams.utm_content,
 				marketingParams.utm_id,
 				marketingParams.utm_term,
-				page,
-				hostname,
-				pathname,
+				firstPageHref,
+				firstPageHostname,
+				firstPagePathname,
+				pageHref,
+				pageHostname,
+				pagePathname,
 				referrer,
 				referrerHostname,
 				referrerPathname,
@@ -89,9 +96,8 @@ router.post('/e', async (request, env, ctx) => {
 				parsedUserAgent.os.version,
 				parsedUserAgent.browser.name,
 				parsedUserAgent.browser.version,
+				// hotlinks, experiments, variants, flags
 			]
-
-			// TODO add geo and user properties in event object
 		);
 	}
 

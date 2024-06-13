@@ -23,3 +23,12 @@ export function removeNonAlphaChars(str) {
 export function removeNonAlphaAndNonNumericChars(str) {
 	return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
+
+export function isValidUrl(string) {
+	try {
+		new URL(string);
+		return true;
+	} catch (e) {
+		return false;
+	}
+}
