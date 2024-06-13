@@ -1,8 +1,9 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
 import { parse, serialize } from 'cookie';
-import { deepMerge, extractRootDomain } from './utils';
+import { deepMerge, extractRootDomain, removeNonAlphaAndNonNumericChars, removeNonAlphaChars } from './utils';
 import _ from 'lodash';
+import { UAParser } from 'ua-parser-js';
 
 const router = Router();
 
@@ -11,6 +12,9 @@ router.post('/e', async (request, env, ctx) => {
 
 	const requestClone = request.clone();
 	const body = await request.json();
+	let { city, region, country, postalCode } = request.cf;
+	[city, region, country] = [city, region, country].map((value) => (value ? removeNonAlphaChars(value) : null));
+	postalCode = postalCode ? removeNonAlphaAndNonNumericChars(postalCode) : null;
 
 	if (!body.fromSdk) {
 		// TODO next step include lifeforce webhooks, then also main site js
@@ -18,6 +22,8 @@ router.post('/e', async (request, env, ctx) => {
 	}
 
 	console.log('From SDK');
+	const uaParser = new UAParser(request.headers.get('user-agent'));
+	const parsedUserAgent = uaParser.getResult();
 
 	const client = new Client(env.DATABASE_URL);
 	await client.connect();
@@ -25,7 +31,7 @@ router.post('/e', async (request, env, ctx) => {
 	const cookie = parse(request.headers.get('Cookie') || '');
 
 	const linker = cookie['_al'] || '';
-	const [pseudoId, sessionId] = linker.split('*');
+	const [pseudoId, sessionId] = linker ? linker.split('*') : [null, null];
 
 	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
 
@@ -35,8 +41,10 @@ router.post('/e', async (request, env, ctx) => {
 	const referrerPathname = referrerUrl?.pathname;
 
 	for (const event of body.events) {
-		console.log('location', event?.location, 'from event', event);
-		const url = event?.location ? new URL('https://' + event.location) : new URL('https://quiz.mylifeforce.com'); // NB hardcoded temporarily
+		const url = event?.location ? new URL(event.location) : '';
+
+		const deviceWidth = event?.width ? event.width : null;
+		const deviceHeight = event?.height ? event.height : null;
 
 		const isRotatorUrl = url?.pathname?.startsWith('/r/');
 		// redirectUrl is the url to which the rotator redirects the user to
@@ -49,7 +57,7 @@ router.post('/e', async (request, env, ctx) => {
 		const pathname = pageUrl.pathname;
 
 		await client.query(
-			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
 			[
 				event.eventName,
 				event.companyId,
@@ -68,6 +76,19 @@ router.post('/e', async (request, env, ctx) => {
 				referrer,
 				referrerHostname,
 				referrerPathname,
+				city,
+				region,
+				country,
+				postalCode,
+				parsedUserAgent.device.vendor,
+				parsedUserAgent.device.model,
+				parsedUserAgent.device.type,
+				deviceWidth,
+				deviceHeight,
+				parsedUserAgent.os.name,
+				parsedUserAgent.os.version,
+				parsedUserAgent.browser.name,
+				parsedUserAgent.browser.version,
 			]
 
 			// TODO add geo and user properties in event object
@@ -79,46 +100,6 @@ router.post('/e', async (request, env, ctx) => {
 	return Response.json({
 		success: true,
 	});
-});
-
-router.post('/i', async (request, env, ctx) => {
-	const cookie = parse(request.headers.get('Cookie') || '');
-	const oldAlValue = JSON.parse(cookie?.['al'] || '{}');
-
-	let userId = oldAlValue?.userId;
-	if (!userId) {
-		// also create user in database with this id
-		userId = crypto.randomUUID();
-	}
-
-	let sessionId = oldAlValue?.sessionId;
-	if (!sessionId) {
-		sessionId = crypto.randomUUID();
-	}
-
-	const timestamp = new Date().toISOString();
-
-	const queryParams = JSON.stringify(request.query);
-
-	const al = {
-		...oldAlValue,
-		userId,
-		sessionId,
-		timestamp,
-		queryParams,
-	};
-
-	const newCookie = serialize('al', JSON.stringify(al), {
-		httpOnly: true,
-	});
-
-	const response = Response.json({
-		success: true,
-	});
-	response.headers.append('Set-Cookie', newCookie);
-	response.headers.append('al', JSON.stringify(al));
-
-	return response;
 });
 
 router.get('/i', async (request, env, ctx) => {
