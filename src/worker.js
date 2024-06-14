@@ -36,13 +36,12 @@ router.post('/e', async (request, env, ctx) => {
 	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
 
 	const referrer = request.headers.get('referer');
-	const referrerUrl = referrer ? new URL(referrer) : null;
+	const referrerUrl = isValidUrl(referrer) ? new URL(referrer) : null;
+	const referrerHref = referrerUrl?.href;
 	const referrerHostname = referrerUrl?.hostname;
 	const referrerPathname = referrerUrl?.pathname;
 
 	for (const event of body.events) {
-		console.log('event', event);
-
 		const deviceWidth = event?.width ? event.width : null;
 		const deviceHeight = event?.height ? event.height : null;
 
@@ -50,7 +49,6 @@ router.post('/e', async (request, env, ctx) => {
 		// const isRotatorUrl = url?.pathname?.startsWith('/r/');
 
 		const pageHref = event.location;
-		console.log('page', pageHref);
 		const pageUrl = isValidUrl(pageHref) ? new URL(pageHref) : null;
 		const pageHostname = pageUrl?.hostname;
 		const pagePathname = pageUrl?.pathname;
@@ -67,7 +65,7 @@ router.post('/e', async (request, env, ctx) => {
 				event.companyId,
 				pseudoId,
 				sessionId,
-				event.parameters,
+				event.eventParameters,
 				marketingParams.utm_campaign,
 				marketingParams.utm_source,
 				marketingParams.utm_medium,
@@ -80,7 +78,7 @@ router.post('/e', async (request, env, ctx) => {
 				pageHref,
 				pageHostname,
 				pagePathname,
-				referrer,
+				referrerHref,
 				referrerHostname,
 				referrerPathname,
 				city,
@@ -215,11 +213,13 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 	await client.connect();
 
 	const firstPage = body.marketingParams.lp;
-	const firstPageUrl = new URL(body.marketingParams.lp);
-	const hostname = firstPageUrl.hostname;
-	const pathname = firstPageUrl.pathname;
+	const firstPageUrl = isValidUrl(firstPage) ? new URL(firstPage) : null;
+	const firstPageHref = firstPageUrl?.href;
+	const firstPageHostname = firstPageUrl?.hostname;
+	const firstPagePathname = firstPageUrl?.pathname;
 
-	const referrer = body.referrer ? new URL(body.referrer) : null;
+	const referrer = isValidUrl(body.referrer) ? new URL(body.referrer) : null;
+	const referrerHref = referrer?.href;
 	const referrerHostname = referrer?.hostname;
 	const referrerPathname = referrer?.pathname;
 
@@ -270,12 +270,12 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 				body.marketingParams.utm_content,
 				body.marketingParams.utm_id,
 				body.marketingParams.utm_term,
-				firstPage,
-				hostname,
-				pathname,
-				firstPage,
-				hostname,
-				pathname,
+				firstPageHref,
+				firstPageHostname,
+				firstPagePathname,
+				firstPageHref,
+				firstPageHostname,
+				firstPagePathname,
 			]
 		);
 
@@ -293,10 +293,10 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 				body.sessionId,
 				body.pseudoId,
 				body.companyId,
-				firstPage,
-				hostname,
-				pathname,
-				body.referrer,
+				firstPageHref,
+				firstPageHostname,
+				firstPagePathname,
+				referrerHref,
 				referrerHostname,
 				referrerPathname,
 				body.city,
