@@ -112,7 +112,7 @@ router.get('/i', async (request, env, ctx) => {
 	// return new Response('success');
 });
 
-reouter.get('/hello', async (request, env, ctx) => {
+router.get('/hello', async (request, env, ctx) => {
 	return new Response('Hello World!', {
 		headers: {
 			'content-type': 'text/plain',
