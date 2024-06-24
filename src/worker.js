@@ -33,7 +33,7 @@ router.post('/e', async (request, env, ctx) => {
 	const linker = cookie['_al'] || '';
 	const [pseudoId, sessionId] = linker.split('*');
 
-	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
+	const marketingParams = !!sessionId ? JSON.parse(atob(decodeURIComponent(sessionId).split('.')[2])) : {};
 
 	const referrer = request.headers.get('referer');
 	const referrerUrl = isValidUrl(referrer) ? new URL(referrer) : null;
