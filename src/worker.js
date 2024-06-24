@@ -112,6 +112,14 @@ router.get('/i', async (request, env, ctx) => {
 	// return new Response('success');
 });
 
+reouter.get('/hello', async (request, env, ctx) => {
+	return new Response('Hello World!', {
+		headers: {
+			'content-type': 'text/plain',
+		},
+	});
+});
+
 router.patch('/i', async (request, env, ctx) => {
 	const body = await request.json();
 
