@@ -1,17 +1,28 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
-import { parse, serialize } from 'cookie';
-import { deepMerge, extractRootDomain, isValidUrl, removeNonAlphaAndNonNumericChars, removeNonAlphaChars } from './utils';
+import { parse } from 'cookie';
+import {
+	deepMerge,
+	extractRootDomain,
+	isValidPseudo,
+	isValidSession,
+	isValidUrl,
+	removeNonAlphaAndNonNumericChars,
+	removeNonAlphaChars,
+} from './utils';
 import _ from 'lodash';
 import { UAParser } from 'ua-parser-js';
+import { createSession } from './queries/session';
+import { createNewPseudo } from './queries/pseudo';
+import { createEvent } from './queries/event';
 
 const router = Router();
 
 router.post('/e', async (request, env, ctx) => {
 	//TODO authenticate request
-
 	const requestClone = request.clone();
 	const body = await request.json();
+
 	let { city, region, country, postalCode } = request.cf;
 	[city, region, country] = [city, region, country].map((value) => (value ? removeNonAlphaChars(value) : null));
 	postalCode = postalCode ? removeNonAlphaAndNonNumericChars(postalCode) : null;
@@ -31,7 +42,7 @@ router.post('/e', async (request, env, ctx) => {
 	const cookie = parse(request.headers.get('Cookie') || '');
 
 	const linker = cookie['_al'] || '';
-	const [pseudoId, sessionId] = linker.split('*');
+	let [pseudoId, sessionId] = linker.split('*');
 
 	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
 
@@ -58,44 +69,42 @@ router.post('/e', async (request, env, ctx) => {
 		const firstPageHostname = firstPageUrl?.hostname;
 		const firstPagePathname = firstPageUrl?.pathname;
 
-		await client.query(
-			`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, first_page_href, first_page_hostname, first_page_pathname, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
-			[
-				event.eventName,
-				event.companyId,
-				pseudoId,
-				sessionId,
-				event.eventParameters,
-				marketingParams.utm_campaign,
-				marketingParams.utm_source,
-				marketingParams.utm_medium,
-				marketingParams.utm_content,
-				marketingParams.utm_id,
-				marketingParams.utm_term,
-				firstPageHref,
-				firstPageHostname,
-				firstPagePathname,
-				pageHref,
-				pageHostname,
-				pagePathname,
-				referrerHref,
-				referrerHostname,
-				referrerPathname,
-				city,
-				region,
-				country,
-				postalCode,
-				parsedUserAgent.device.vendor,
-				parsedUserAgent.device.model,
-				parsedUserAgent.device.type,
-				deviceWidth,
-				deviceHeight,
-				parsedUserAgent.os.name,
-				parsedUserAgent.os.version,
-				parsedUserAgent.browser.name,
-				parsedUserAgent.browser.version,
-				// hotlinks, experiments, variants, flags
-			]
+		await createEvent(
+			client,
+			event.eventName,
+			event.companyId,
+			pseudoId,
+			sessionId,
+			event.eventParameters,
+			marketingParams.utm_campaign,
+			marketingParams.utm_source,
+			marketingParams.utm_medium,
+			marketingParams.utm_content,
+			marketingParams.utm_id,
+			marketingParams.utm_term,
+			firstPageHref,
+			firstPageHostname,
+			firstPagePathname,
+			pageHref,
+			pageHostname,
+			pagePathname,
+			referrerHref,
+			referrerHostname,
+			referrerPathname,
+			city,
+			region,
+			country,
+			postalCode,
+			parsedUserAgent.device.vendor,
+			parsedUserAgent.device.model,
+			parsedUserAgent.device.type,
+			deviceWidth,
+			deviceHeight,
+			parsedUserAgent.os.name,
+			parsedUserAgent.os.version,
+			parsedUserAgent.browser.name,
+			parsedUserAgent.browser.version
+			// hotlinks, experiments, variants, flags
 		);
 	}
 
@@ -114,10 +123,6 @@ router.get('/i', async (request, env, ctx) => {
 
 router.patch('/i', async (request, env, ctx) => {
 	const body = await request.json();
-
-	const url = new URL(request.url);
-	const urlParams = url.searchParams;
-
 	const location = body.location;
 
 	if (!location || !isValidUrl(location)) {
@@ -148,6 +153,7 @@ router.patch('/i', async (request, env, ctx) => {
 	const { pseudoId, sessionId, userIds } = cookieLinker.split('*');
 
 	const setObject = body.set;
+
 	const key = setObject.key;
 	const value = setObject.value;
 
@@ -155,6 +161,7 @@ router.patch('/i', async (request, env, ctx) => {
 
 	if (key === 'urlParams') {
 		let marketingParams = deepMerge(JSON.parse(atob(sessionId.split('.')[2])), value);
+
 		const newSessionId = sessionId.split('.').slice(0, 2).join('.') + '.' + btoa(JSON.stringify(marketingParams));
 
 		newLinker = pseudoId + '*' + newSessionId + '*' + userIds;
@@ -224,36 +231,32 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 	const referrerPathname = referrer?.pathname;
 
 	if (body.shouldCreatePseudo) {
-		const trackedUserId = crypto.randomUUID();
-		const timestamp = body.pseudoId.split('.')[1];
-
-		await client.query(
-			`INSERT INTO tracked_user (id,
-			company_id,
-			city,
-			region,
-			country,
-			first_utm_campaign,
-			first_utm_source,
-			first_utm_medium,
-			first_utm_content,
-			first_utm_id,
-			first_utm_term,
-			last_utm_campaign,
-			last_utm_source,
-			last_utm_medium,
-			last_utm_content,
-			last_utm_id,
-			last_utm_term,
-			first_page_href,
-			first_page_hostname,
-			first_page_pathname,
-			last_page_href,
-			last_page_hostname,
-			last_page_pathname)
-		values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
-			[
-				trackedUserId,
+		await createNewPseudo(
+			client,
+			body.pseudoId,
+			body.companyId,
+			body.city,
+			body.region,
+			body.country,
+			body.marketingParams.utm_campaign,
+			body.marketingParams.utm_source,
+			body.marketingParams.utm_medium,
+			body.marketingParams.utm_content,
+			body.marketingParams.utm_id,
+			body.marketingParams.utm_term,
+			firstPageHref,
+			firstPageHostname,
+			firstPagePathname,
+			referrerHref,
+			referrerHostname,
+			referrerPathname
+		);
+	} else if (isValidPseudo(body.pseudoId)) {
+		const existingPseudo = await client.query(`SELECT * FROM pseudo WHERE id = $1`, [body.pseudoId]);
+		if (existingPseudo.rows.length === 0) {
+			await createNewPseudo(
+				client,
+				body.pseudoId,
 				body.companyId,
 				body.city,
 				body.region,
@@ -264,32 +267,87 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 				body.marketingParams.utm_content,
 				body.marketingParams.utm_id,
 				body.marketingParams.utm_term,
-				body.marketingParams.utm_campaign,
-				body.marketingParams.utm_source,
-				body.marketingParams.utm_medium,
-				body.marketingParams.utm_content,
-				body.marketingParams.utm_id,
-				body.marketingParams.utm_term,
 				firstPageHref,
 				firstPageHostname,
 				firstPagePathname,
-				firstPageHref,
-				firstPageHostname,
-				firstPagePathname,
-			]
-		);
-
-		await client.query(`INSERT INTO pseudo (id, tracked_user_id, created_at) VALUES ($1, $2, TO_TIMESTAMP($3 / 1000.0))`, [
-			body.pseudoId,
-			trackedUserId,
-			timestamp,
-		]);
+				referrerHref,
+				referrerHostname,
+				referrerPathname
+			);
+		}
 	}
 
 	if (body.shouldCreateSession) {
-		await client.query(
-			`INSERT INTO session (id, pseudo_id, company_id, first_page_href, first_page_hostname, first_page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, country, region, device_brand, device_model, device_type, device_os, device_os_version, browser, browser_version, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
-			[
+		await createSession(
+			client,
+			body.sessionId,
+			body.pseudoId,
+			body.companyId,
+			firstPageHref,
+			firstPageHostname,
+			firstPagePathname,
+			referrerHref,
+			referrerHostname,
+			referrerPathname,
+			body.city,
+			body.country,
+			body.region,
+			body.device.vendor,
+			body.device.model,
+			body.device.type,
+			body.os.name,
+			body.os.version,
+			body.browser.name,
+			body.browser.version,
+			body.marketingParams.utm_campaign,
+			body.marketingParams.utm_source,
+			body.marketingParams.utm_medium,
+			body.marketingParams.utm_content,
+			body.marketingParams.utm_id,
+			body.marketingParams.utm_term
+		);
+
+		await createEvent(
+			client,
+			'session_begin',
+			body.companyId,
+			body.pseudoId,
+			body.sessionId,
+			null,
+			body.marketingParams.utm_campaign,
+			body.marketingParams.utm_source,
+			body.marketingParams.utm_medium,
+			body.marketingParams.utm_content,
+			body.marketingParams.utm_id,
+			body.marketingParams.utm_term,
+			firstPageHref,
+			firstPageHostname,
+			firstPagePathname,
+			null,
+			null,
+			null,
+			referrerHref,
+			referrerHostname,
+			referrerPathname,
+			body.city,
+			body.region,
+			body.country,
+			null,
+			body.device.vendor,
+			body.device.model,
+			body.device.type,
+			null,
+			null,
+			body.os.name,
+			body.os.version,
+			body.browser.name,
+			body.browser.version
+		);
+	} else if (isValidSession(body.sessionId)) {
+		const existingSession = await client.query(`SELECT * FROM session WHERE id = $1`, [body.sessionId]);
+		if (existingSession.rows.length === 0) {
+			await createSession(
+				client,
 				body.sessionId,
 				body.pseudoId,
 				body.companyId,
@@ -314,9 +372,9 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 				body.marketingParams.utm_medium,
 				body.marketingParams.utm_content,
 				body.marketingParams.utm_id,
-				body.marketingParams.utm_term,
-			]
-		);
+				body.marketingParams.utm_term
+			);
+		}
 	}
 
 	ctx.waitUntil(client.end());

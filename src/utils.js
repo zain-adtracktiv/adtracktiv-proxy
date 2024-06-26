@@ -32,3 +32,42 @@ export function isValidUrl(string) {
 		return false;
 	}
 }
+
+export function isValidPseudo(pseudoId) {
+	if (!pseudoId) return false;
+	const pattern = /^\d{10}\.\d{13}$/;
+	return pattern.test(pseudoId);
+}
+
+export function isValidSession(sessionId) {
+	if (!sessionId) return false;
+	// Regular expression to match the overall pattern
+	const pattern = /^([A-Za-z0-9+/=]+)\.(\d{13})\.([A-Za-z0-9+/=]+)$/;
+
+	const match = sessionId.match(pattern);
+
+	if (!match) {
+		return false;
+	}
+
+	const [, fingerprint, timestamp, urlParams] = match;
+
+	// Check if fingerprint is valid base64 and decodes to an IP address
+	try {
+		if (atob(fingerprint).split('.').length !== 4) {
+			return false;
+		}
+	} catch (e) {
+		return false;
+	}
+
+	// Check if urlParams is valid base64 and decodes to a valid JSON object
+	try {
+		const decodedUrlParams = atob(urlParams);
+		JSON.parse(decodedUrlParams);
+	} catch (e) {
+		return false;
+	}
+
+	return true;
+}
