@@ -1,9 +1,12 @@
 import { Client } from '@neondatabase/serverless';
 import { Router } from 'itty-router';
-import { parse } from 'cookie';
+import { parse, serialize } from 'cookie';
 import {
+	addCorsHeaders,
 	deepMerge,
 	extractRootDomain,
+	get,
+	hash,
 	isValidPseudo,
 	isValidSession,
 	isValidUrl,
@@ -115,18 +118,59 @@ router.post('/e', async (request, env, ctx) => {
 	});
 });
 
+// Endpoint that is called onEngage from the SDK
 router.get('/i', async (request, env, ctx) => {
-	return await env.ROUTER.fetch(request);
+	// return await env.ROUTER.fetch(request);
 
-	// return new Response('success');
-});
+	const hostname = request.headers.get('host');
+	const rootHost = extractRootDomain(hostname);
 
-router.get('/hello', async (request, env, ctx) => {
-	return new Response('Hello World!', {
-		headers: {
-			'content-type': 'text/plain',
-		},
-	});
+	const cookie = parse(request.headers.get('Cookie') || '');
+	const linker = cookie['_al'] || '';
+
+	const existingUserObj = get('userParams', linker);
+
+	let headers;
+
+	if (linker && (!existingUserObj?.ct || !existingUserObj?.st || !existingUserObj?.country)) {
+		let { city, region, country } = request.cf;
+
+		const newUserObj = {
+			...existingUserObj,
+			...(city && !existingUserObj?.ct && { ct: await hash(city.toLowerCase().replace(/[^a-z]/g, '')) }),
+			...(country && !existingUserObj?.country && { country: await hash(country.toLowerCase().replace(/[^a-z]/g, '')) }),
+			...(region &&
+				!existingUserObj?.st && {
+					st: await hash(region.toLowerCase().replace(/[^a-z]/g, '')),
+				}),
+		};
+
+		const newLinker = `${linker.split('*')[0]}*${linker.split('*')[1]}*${btoa(JSON.stringify(newUserObj))}`;
+
+		headers = {
+			'Content-Type': 'application/javascript',
+			'Cache-Control': 'max-age=3600',
+		};
+
+		if (newLinker) {
+			const cookie = serialize('_al', newLinker, {
+				httpOnly: true,
+				secure: true,
+				sameSite: 'strict',
+				domain: `.${rootHost}`,
+				maxAge: 31536000,
+			});
+			headers['Set-Cookie'] = cookie;
+		}
+	}
+
+	const { searchParams } = new URL(request.url);
+	const companyId = searchParams.get('companyId');
+
+	const config = await env.SDK_CONFIG.get(companyId);
+
+	const response = Response.json({ config }, { headers });
+	return response;
 });
 
 router.patch('/i', async (request, env, ctx) => {
@@ -191,7 +235,13 @@ router.patch('/i', async (request, env, ctx) => {
 	};
 
 	if (newLinker) {
-		const cookie = `_al=${newLinker}; HttpOnly; Secure; SameSite=Strict; Path=/; Domain=.${rootHost}; Max-Age=31536000;`;
+		const cookie = serialize('_al', newLinker, {
+			httpOnly: true,
+			secure: true,
+			sameSite: 'strict',
+			domain: `.${rootHost}`,
+			maxAge: 31536000,
+		});
 		headers['Set-Cookie'] = cookie;
 	}
 
@@ -433,6 +483,14 @@ router.post('/reconcile-pseudo', async (request, env, ctx) => {
 
 	return Response.json({
 		success: true,
+	});
+});
+
+router.get('/hello', async (request, env, ctx) => {
+	return new Response('Hello World!', {
+		headers: {
+			'content-type': 'text/plain',
+		},
 	});
 });
 

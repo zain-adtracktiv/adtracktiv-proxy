@@ -71,3 +71,40 @@ export function isValidSession(sessionId) {
 
 	return true;
 }
+
+export function addCorsHeaders(response) {
+	response.headers.set('Access-Control-Allow-Origin', '*');
+	response.headers.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,OPTIONS');
+	response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+	return response;
+}
+
+export function get(key, linker) {
+	if (!linker) return null;
+
+	if (key === 'linkerId') {
+		return linker;
+	} else if (key === 'pseudoId') {
+		return linker.split('*')[0];
+	} else if (key === 'urlParams') {
+		return JSON.parse(atob(linker.split('*')[1].split('.')[2]));
+	} else if (key === 'sessionId') {
+		return linker.split('*')[1].split('.')[1];
+	} else if (key === 'userParams') {
+		return JSON.parse(atob(linker.split('*')[2]));
+	}
+}
+
+export const hash = async (field, fn = (v) => v) => {
+	if (!field) return Promise.resolve('');
+	return sha256(fn(field));
+};
+
+export const sha256 = async (string) => {
+	const msgBuffer = new TextEncoder().encode(string);
+
+	const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+
+	return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+};
