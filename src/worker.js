@@ -44,7 +44,7 @@ router.post('/e', async (request, env, ctx) => {
 	const linker = cookie['_al'] || '';
 	let [pseudoId, sessionId] = linker.split('*');
 
-	const marketingParams = !!sessionId ? JSON.parse(atob(sessionId.split('.')[2])) : {};
+	const marketingParams = !!sessionId ? JSON.parse(atob(decodeURIComponent(sessionId).split('.')[2])) : {};
 
 	const referrer = request.headers.get('referer');
 	const referrerUrl = isValidUrl(referrer) ? new URL(referrer) : null;
@@ -119,6 +119,14 @@ router.get('/i', async (request, env, ctx) => {
 	return await env.ROUTER.fetch(request);
 
 	// return new Response('success');
+});
+
+router.get('/hello', async (request, env, ctx) => {
+	return new Response('Hello World!', {
+		headers: {
+			'content-type': 'text/plain',
+		},
+	});
 });
 
 router.patch('/i', async (request, env, ctx) => {
