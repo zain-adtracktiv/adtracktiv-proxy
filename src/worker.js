@@ -121,9 +121,23 @@ router.post('/e', async (request, env, ctx) => {
 // Endpoint that is called onEngage from the SDK
 router.get('/i', async (request, env, ctx) => {
 	// return await env.ROUTER.fetch(request);
-
 	const hostname = request.headers.get('host');
+	const origin = request.headers.get('origin');
+
 	const rootHost = extractRootDomain(hostname);
+	const rootOrigin = extractRootDomain(origin);
+
+	if (rootHost !== rootOrigin) {
+		console.log(`[${correlationId}] Bad Request: not first party ${rootHost} !== ${clientRootHost}`);
+
+		return new Response('Bad Request', {
+			status: 400,
+		});
+	}
+
+	if (request.method === 'OPTIONS') {
+		return addCorsHeaders(new Response(null, { status: 204 }), origin);
+	}
 
 	const cookie = parse(request.headers.get('Cookie') || '');
 	const linker = cookie['_al'] || '';
@@ -170,7 +184,7 @@ router.get('/i', async (request, env, ctx) => {
 	const config = await env.SDK_CONFIG.get(companyId);
 
 	const response = Response.json({ config }, { headers });
-	return response;
+	return addCorsHeaders(response, origin);
 });
 
 router.patch('/i', async (request, env, ctx) => {

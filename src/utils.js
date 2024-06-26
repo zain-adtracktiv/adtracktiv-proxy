@@ -72,10 +72,11 @@ export function isValidSession(sessionId) {
 	return true;
 }
 
-export function addCorsHeaders(response) {
-	response.headers.set('Access-Control-Allow-Origin', '*');
+export function addCorsHeaders(response, url) {
+	response.headers.set('Access-Control-Allow-Origin', url ? url : '*');
 	response.headers.set('Access-Control-Allow-Methods', 'GET,HEAD,POST,OPTIONS');
 	response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+	response.headers.set('Access-Control-Allow-Credentials', 'true');
 	return response;
 }
 
