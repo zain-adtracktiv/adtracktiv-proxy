@@ -521,10 +521,6 @@ router.get('/hello', async (request, env, ctx) => {
 	});
 });
 
-router.all('/test', async (request, env) => {
-	return await env.ROUTER.fetch(request);
-	// return awaitnew Response(result);
-	// new Response('Not Found', { status: 404 })
-});
+router.all('*', () => new Response('Not Found', { status: 404 }));
 
 export default { ...router };
