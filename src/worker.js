@@ -163,7 +163,7 @@ router.get('/i', async (request, env, ctx) => {
 			...existingUserObj,
 			...(city && !existingUserObj?.ct && { ct: await hash(city.toLowerCase().replace(/[^a-z]/g, '')) }),
 			...(country && !existingUserObj?.country && { country: await hash(country.toLowerCase().replace(/[^a-z]/g, '')) }),
-			...(region &&
+			...(regionCode &&
 				!existingUserObj?.st && {
 					st: await hash(regionCode.toLowerCase().replace(/[^a-z]/g, '')),
 				}),
