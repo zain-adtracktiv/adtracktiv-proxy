@@ -122,9 +122,16 @@ router.post('/e', async (request, env, ctx) => {
 	});
 });
 
-// Endpoint that is called onEngage from the SDK
+// Endpoint that is called onEngage from the SDK or on init from the JS SDK
 router.get('/i', async (request, env, ctx) => {
-	// return await env.ROUTER.fetch(request);
+	const url = new URL(request.url);
+	const urlParams = url.searchParams;
+	const clientH = JSON.parse(urlParams.get('h') || '{}');
+
+	if (clientH) {
+		return await env.ROUTER.fetch(request);
+	}
+
 	const hostname = request.headers.get('host');
 	const origin = request.headers.get('origin');
 
