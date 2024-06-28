@@ -127,7 +127,7 @@ router.get('/i', async (request, env, ctx) => {
 	const { searchParams } = new URL(request.url);
 
 	const clientH = JSON.parse(searchParams.get('h') || '{}');
-	if (clientH) {
+	if (clientH && isValidUrl(clientH.l)) {
 		return await env.ROUTER.fetch(request);
 	}
 
