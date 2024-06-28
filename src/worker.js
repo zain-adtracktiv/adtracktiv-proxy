@@ -124,10 +124,9 @@ router.post('/e', async (request, env, ctx) => {
 
 // Endpoint that is called onEngage from the SDK or on init from the JS SDK
 router.get('/i', async (request, env, ctx) => {
-	const url = new URL(request.url);
-	const urlParams = url.searchParams;
-	const clientH = JSON.parse(urlParams.get('h') || '{}');
+	const { searchParams } = new URL(request.url);
 
+	const clientH = JSON.parse(searchParams.get('h') || '{}');
 	if (clientH) {
 		return await env.ROUTER.fetch(request);
 	}
@@ -189,7 +188,6 @@ router.get('/i', async (request, env, ctx) => {
 		}
 	}
 
-	const { searchParams } = new URL(request.url);
 	const companyId = searchParams.get('companyId');
 
 	const config = await env.SDK_CONFIG.get(companyId);
