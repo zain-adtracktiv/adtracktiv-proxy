@@ -29,7 +29,6 @@ router.post('/e', async (request, env, ctx) => {
 	let { city, region, country, postalCode } = request.cf;
 	[city, region, country] = [city, region, country].map((value) => (value ? removeNonAlphaChars(value) : null));
 	postalCode = postalCode ? removeNonAlphaAndNonNumericChars(postalCode) : null;
-
 	if (!body.fromSdk) {
 		// TODO next step include lifeforce webhooks, then also main site js
 		return await env.ROUTER.fetch(requestClone);
@@ -46,6 +45,8 @@ router.post('/e', async (request, env, ctx) => {
 
 	const linker = cookie['_al'] || '';
 	let [pseudoId, sessionId] = linker.split('*');
+
+	const variations = JSON.parse(cookie['variations'] || '{}');
 
 	const marketingParams = !!sessionId ? JSON.parse(atob(decodeURIComponent(sessionId).split('.')[2])) : {};
 
@@ -106,8 +107,11 @@ router.post('/e', async (request, env, ctx) => {
 			parsedUserAgent.os.name,
 			parsedUserAgent.os.version,
 			parsedUserAgent.browser.name,
-			parsedUserAgent.browser.version
-			// hotlinks, experiments, variants, flags
+			parsedUserAgent.browser.version,
+			variations.hotLinkSlug,
+			variations.pathwayId,
+			variations.experimentId,
+			variations.experimentVariantId
 		);
 	}
 
@@ -128,7 +132,7 @@ router.get('/i', async (request, env, ctx) => {
 	const rootOrigin = extractRootDomain(origin);
 
 	if (rootHost !== rootOrigin) {
-		console.log(`[${correlationId}] Bad Request: not first party ${rootHost} !== ${clientRootHost}`);
+		console.log(`Bad Request: not first party ${rootHost} !== ${rootOrigin}`);
 
 		return new Response('Bad Request', {
 			status: 400,
@@ -268,20 +272,14 @@ router.patch('/i', async (request, env, ctx) => {
 });
 
 router.post('/decide', async (request, env, ctx) => {
-	// TODO: Replace
-	const value = await env.SDK_CONFIG.get('vip.trysnow.com');
+	const value = await env.SDK_CONFIG.get('www.marketintelgpt.com');
 	const experiences = JSON.parse(value);
 
 	// Condition checking here
 	const experience = experiences[0];
 
 	return Response.json({
-		redirectUrl: experience.url,
-		variations: experience.flags,
-		// hotLinkSlug,
-		// pathwayId,
-		// experimentId,
-		// experimentVariantId,
+		experience,
 	});
 });
 
@@ -376,7 +374,11 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 			body.marketingParams.utm_medium,
 			body.marketingParams.utm_content,
 			body.marketingParams.utm_id,
-			body.marketingParams.utm_term
+			body.marketingParams.utm_term,
+			body.variation?.hotLinkSlug,
+			body.variation?.pathwayId,
+			body.variation?.experimentId,
+			body.variation?.experimentVariantId
 		);
 
 		await createEvent(
@@ -444,7 +446,11 @@ router.post('/pseudo-session', async (request, env, ctx) => {
 				body.marketingParams.utm_medium,
 				body.marketingParams.utm_content,
 				body.marketingParams.utm_id,
-				body.marketingParams.utm_term
+				body.marketingParams.utm_term,
+				body.variation?.hotLinkSlug,
+				body.variation?.pathwayId,
+				body.variation?.experimentId,
+				body.variation?.experimentVariantId
 			);
 		}
 	}

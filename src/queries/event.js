@@ -32,10 +32,14 @@ export async function createEvent(
 	deviceOs,
 	deviceOsVersion,
 	browser,
-	browserVersion
+	browserVersion,
+	hotLinkSlug,
+	pathwayId,
+	experimentId,
+	experimentVariantId
 ) {
 	await client.query(
-		`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, first_page_href, first_page_hostname, first_page_pathname, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
+		`INSERT INTO event (name, company_id, pseudo_id, session_id, parameters, utm_campaign, utm_source, utm_medium, utm_content, utm_id, utm_term, first_page_href, first_page_hostname, first_page_pathname, page_href, page_hostname, page_pathname, referrer_href, referrer_hostname, referrer_pathname, city, region, country, postal_code, device_brand, device_model, device_type, device_width, device_height, device_os, device_os_version, browser, browser_version, hot_link_slug, pathway_id, experiment_id, experiment_variant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)`,
 		[
 			name,
 			companyId,
@@ -78,7 +82,11 @@ export async function createEvent(
 
 			browser,
 			browserVersion,
-			// hotlinks, experiments, variants, flags
+
+			hotLinkSlug,
+			pathwayId,
+			experimentId,
+			experimentVariantId,
 		]
 	);
 }
