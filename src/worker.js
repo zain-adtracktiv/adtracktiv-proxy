@@ -157,7 +157,7 @@ router.get('/i', async (request, env, ctx) => {
 	let headers;
 
 	if (linker && (!existingUserObj?.ct || !existingUserObj?.st || !existingUserObj?.country)) {
-		let { city, region, country } = request.cf;
+		let { city, regionCode, country, postalCode } = request.cf;
 
 		const newUserObj = {
 			...existingUserObj,
@@ -165,8 +165,9 @@ router.get('/i', async (request, env, ctx) => {
 			...(country && !existingUserObj?.country && { country: await hash(country.toLowerCase().replace(/[^a-z]/g, '')) }),
 			...(region &&
 				!existingUserObj?.st && {
-					st: await hash(region.toLowerCase().replace(/[^a-z]/g, '')),
+					st: await hash(regionCode.toLowerCase().replace(/[^a-z]/g, '')),
 				}),
+			...(postalCode && !existingUserObj?.zp && { zp: await hash(postalCode.toLowerCase().replace(/[^a-z0-9]/g, '')) }),
 		};
 
 		const newLinker = `${linker.split('*')[0]}*${linker.split('*')[1]}*${btoa(JSON.stringify(newUserObj))}`;
