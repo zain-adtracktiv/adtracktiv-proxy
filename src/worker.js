@@ -272,11 +272,13 @@ router.patch('/i', async (request, env, ctx) => {
 });
 
 router.post('/decide', async (request, env, ctx) => {
-	const value = await env.SDK_CONFIG.get('www.marketintelgpt.com');
-	const experiences = JSON.parse(value);
+	const body = await request.json();
+
+	const value = await env.SDK_CONFIG.get(body.companyId);
+	const experiences = JSON.parse(value ?? '{}');
 
 	// Condition checking here
-	const experience = experiences[0];
+	const experience = experiences.pathways?.[0];
 
 	return Response.json({
 		experience,
